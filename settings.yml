@@ -1,13 +1,31 @@
-use_default_settings: true
+use_default_settings:
+  engines:
+    remove:
+      - ahmia
+      - torch
+      - brave
+      - brave.images
+      - brave.videos
+      - brave.news
+      - duckduckgo
+      - duckduckgo images
+      - duckduckgo videos
+      - vimeo
+      - google videos
 
 server:
-  secret_key: "r8Vq2mX9kL4pT7wN6zH3cB5fJ1sD0aYg"
+  secret_key: "7Dkr5ET4hEIE82HG5G96THpFdvsPL1CjT5YqMoT"
   limiter: false
-  image_proxy: false
+  image_proxy: true
 
 search:
   safe_search: 0
   formats:
     - html
     - json
-    
+
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 8.0
+  pool_connections: 50
+  
