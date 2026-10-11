@@ -1,7 +1,7 @@
 use_default_settings: true
 
 server:
-  secret_key: "REPLACE_WITH_A_LONG_RANDOM_SECRET"
+  secret_key: "r8Vq2mX9kL4pT7wN6zH3cB5fJ1sD0aYg"
   limiter: false
   image_proxy: false
 
