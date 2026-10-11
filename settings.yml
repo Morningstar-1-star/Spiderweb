@@ -28,4 +28,3 @@ outgoing:
   request_timeout: 5.0
   max_request_timeout: 8.0
   pool_connections: 50
-  
