@@ -20,6 +20,10 @@ main{max-width:860px;margin:0 auto;padding:12px}.r{padding:10px 0;border-bottom:
 dialog{background:var(--bg);color:var(--fg);border:1px solid var(--ln);border-radius:var(--rad);width:min(560px,94vw);max-height:88vh;padding:14px}
 dialog label{display:block;margin:10px 0 3px;color:var(--mut);font-size:.85em}dialog textarea,dialog input,dialog select{width:100%}textarea{min-height:110px;font-size:.85em}
 .msg{padding:30px 0;text-align:center;color:var(--mut)}.lens{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}.lens input{flex:1;min-width:140px}
+.kg{display:flex;gap:12px;background:var(--card);border:1px solid var(--ln);border-radius:var(--rad);padding:12px;margin:10px 0}.kg img{width:110px;height:110px;object-fit:cover;border-radius:var(--rad);flex:none}.kg p{margin:4px 0}
+.hs{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}.st{flex:none;width:200px;background:var(--card);border-radius:var(--rad);overflow:hidden;color:var(--fg)}.st img{width:100%;height:110px;object-fit:cover;display:block}.st span{display:block;padding:6px 8px 0;font-size:.9em}.st small{display:block;padding:2px 8px 8px;color:var(--mut)}
+details.r summary{cursor:pointer}.th{position:relative;flex:none}.badge{position:absolute;right:6px;bottom:6px;background:#000c;color:#fff;font-size:.7em;padding:1px 6px;border-radius:6px}
+#vw{position:fixed;inset:0;background:var(--bg);z-index:20;overflow:auto;display:none;padding:env(safe-area-inset-top) 10px 20px}#vw img.big{width:100%;max-height:70vh;object-fit:contain;border-radius:var(--rad);background:var(--card)}
 </style><style id="cc"></style></head><body>
 <header><div class="row"><h1>Spiderweb</h1><input id="q" type="search" placeholder="Search" enterkeyhint="search"><button class="pri" id="go">Search</button><button id="opt" aria-label="Settings">⚙</button></div>
 <div class="tabs" id="tabs"></div></header><main id="out"><div class="msg">Open ⚙ and set your Worker URL, then search.</div></main>
@@ -32,14 +36,16 @@ dialog label{display:block;margin:10px 0 3px;color:var(--mut);font-size:.85em}di
 <label>Colors: background, text, accent</label><div class="row"><input type="color" id="bg"><input type="color" id="fg"><input type="color" id="ac"></div>
 <label>Text size <span id="fsv"></span></label><input type="range" id="fs" min="13" max="22">
 <label>Corner radius <span id="radv"></span></label><input type="range" id="rad" min="0" max="26">
+<label>Google results (Serper)</label><select id="serper"><option value="1">On, SearXNG as fallback</option><option value="0">Off, SearXNG only</option></select>
 <label>Layout</label><select id="layout"><option value="list">List</option><option value="cards">Cards</option></select>
 <label>Custom CSS</label><textarea id="css" placeholder="body{font-family:serif}"></textarea>
 <label>Settings backup (copy to export, paste to import)</label><textarea id="bk"></textarea>
 <div class="row" style="margin-top:10px"><button class="pri" id="save">Save</button><button id="imp">Import backup</button><button id="rst">Reset</button></div></dialog>
+<div id="vw"></div>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),ok=u=>/^https?:\/\//.test(u||'')?u:'#';
 const P={dark:['#0f1115','#e8eaed','#8ab4f8'],light:['#ffffff','#202124','#1a0dab'],neon:['#070712','#e6f7ff','#00f0ff'],amoled:['#000000','#dddddd','#bb86fc'],paper:['#f5ecd9','#3b2f1e','#a0522d']};
-const D={backend:'',proxy:'',favs:'',block:'',preset:'dark',bg:'#0f1115',fg:'#e8eaed',ac:'#8ab4f8',fs:16,rad:12,layout:'list',css:''};
+const D={backend:'',proxy:'',favs:'',block:'',preset:'dark',bg:'#0f1115',fg:'#e8eaed',ac:'#8ab4f8',fs:16,rad:12,layout:'list',css:'',serper:'1'};
 let S=Object.assign({},D);try{Object.assign(S,JSON.parse(localStorage.getItem('sw')||'{}'))}catch(e){}
 const T=[['general','Web'],['images','Images'],['videos','Videos'],['news','News']];let cat='general',q='',all=[],pg=0,only=false;
 const lines=t=>t.split('\n').map(x=>x.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/.*$/,'')).filter(Boolean);
@@ -49,36 +55,52 @@ const px=u=>S.proxy&&u?S.proxy+encodeURIComponent(u):u;
 function theme(){const r=document.documentElement.style;r.setProperty('--bg',S.bg);r.setProperty('--fg',S.fg);r.setProperty('--ac',S.ac);r.setProperty('--fs',S.fs+'px');r.setProperty('--rad',S.rad+'px');$('#cc').textContent=S.css;document.body.className=S.layout}
 function tabs(){$('#tabs').innerHTML=T.map(([k,n])=>`<button data-k="${k}" class="${k==cat?'on':''}">${n}</button>`).join('')+`<button id="only" class="${only?'on':''}">My sites only</button>`}
 $('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.id=='only')only=!only;else cat=b.dataset.k;tabs();if(q)run(true)};
-async function pull(p){const url=S.backend.replace(/\/$/,'')+'/search?format=json&categories='+cat+'&pageno='+p+'&q='+encodeURIComponent(qq());
- try{const r=await fetch(url,{signal:AbortSignal.timeout(75000)});if(!r.ok)throw 0;return (await r.json()).results||[]}catch(e){return null}}
+let X={},src='',sOK=true;const sc=p=>(30-(p||5))/10;
+function norm(t,j,p){const m=(a,f)=>(a||[]).map(f);
+ if(t=='images')return m(j.images,r=>({url:r.link,title:r.title,img_src:r.imageUrl,thumbnail_src:r.thumbnailUrl,score:sc(r.position),engines:['google']}));
+ if(t=='videos')return m(j.videos,r=>({url:r.link,title:r.title,content:r.snippet,thumbnail:r.imageUrl,length:r.duration,score:sc(r.position),engines:[r.channel||r.source||'google']}));
+ if(t=='news')return m(j.news,r=>({url:r.link,title:r.title,content:(r.date?r.date+' · ':'')+(r.snippet||''),thumbnail:r.imageUrl,score:sc(r.position),engines:[r.source||'google']}));
+ if(p==1)X={kg:j.knowledgeGraph,paa:j.peopleAlsoAsk,rel:j.relatedSearches,top:j.topStories};
+ return m(j.organic,r=>({url:r.link,title:r.title,content:(r.date?r.date+' — ':'')+(r.snippet||''),score:sc(r.position),engines:['google']}))}
+async function pull(p){const B=S.backend.replace(/\/$/,''),t={general:'search',images:'images',videos:'videos',news:'news'}[cat];
+ if(S.serper=='1'&&sOK&&!only){try{const r=await fetch(B+'/s?type='+t+'&page='+p+'&q='+encodeURIComponent(q),{signal:AbortSignal.timeout(20000)});if(!r.ok)throw 0;src='Google results via Serper';return norm(t,await r.json(),p)}catch(e){sOK=false}}
+ src='SearXNG (fallback)';
+ try{const r=await fetch(B+'/search?format=json&categories='+cat+'&pageno='+p+'&q='+encodeURIComponent(qq()),{signal:AbortSignal.timeout(75000)});if(!r.ok)throw 0;return (await r.json()).results||[]}catch(e){return null}}
+function top(){let h='';const k=X.kg;if(k&&k.title)h+=`<div class="kg">${k.imageUrl?`<img referrerpolicy="no-referrer" src="${esc(k.imageUrl)}" alt="">`:''}<div><b>${esc(k.title)}</b><div class="h">${esc(k.type||'')}</div><p>${esc(k.description||'')} ${k.descriptionLink?`<a href="${esc(ok(k.descriptionLink))}" target="_blank" rel="noopener">${esc(k.descriptionSource||'More')}</a>`:''}</p>${Object.entries(k.attributes||{}).slice(0,5).map(([a,b])=>`<div class="h"><b>${esc(a)}:</b> ${esc(b)}</div>`).join('')}</div></div>`;
+ if(X.top&&X.top.length)h+='<div class="sep">Top stories</div><div class="hs">'+X.top.slice(0,8).map(t=>`<a class="st" href="${esc(ok(t.link))}" target="_blank" rel="noopener">${t.imageUrl?`<img loading="lazy" referrerpolicy="no-referrer" src="${esc(t.imageUrl)}" alt="">`:''}<span>${esc(t.title)}</span><small>${esc(t.source||'')} ${esc(t.date||'')}</small></a>`).join('')+'</div>';return h}
+function tail(){let h='';if(cat=='general'&&X.paa&&X.paa.length)h+='<div class="sep">People also ask</div>'+X.paa.slice(0,5).map(p=>`<details class="r"><summary>${esc(p.question)}</summary><p>${esc(p.snippet)} <a href="${esc(ok(p.link))}" target="_blank" rel="noopener">${esc(p.title||'Source')}</a></p></details>`).join('');
+ if(X.rel&&X.rel.length)h+='<div class="sep">Related searches</div><div class="row" style="flex-wrap:wrap">'+X.rel.map(r=>`<button data-rs="${esc(r.query)}">${esc(r.query)}</button>`).join('')+'</div>';return h+`<div class="sep">${esc(src)}</div>`}
+function openV(r){if(!r)return;const w=(r.title||'').toLowerCase().split(/\W+/).filter(x=>x.length>3),f=x=>w.filter(t=>(x.title||'').toLowerCase().includes(t)).length,rel=all.filter(x=>x!==r).sort((a,b)=>f(b)-f(a)).slice(0,30);
+ $('#vw').innerHTML=`<div class="row" style="padding:10px 0"><b style="flex:1">${esc(r._h)}</b><button id="vx">✕</button></div><img class="big" referrerpolicy="no-referrer" src="${esc(px(r.img_src||r.thumbnail_src))}" data-fb="${esc(px(r.thumbnail_src||''))}" alt=""><p>${esc(r.title)}</p><div class="row"><a href="${esc(ok(r.url))}" target="_blank" rel="noopener"><button class="pri">Visit</button></a><a href="${esc(ok(r.img_src))}" target="_blank" rel="noopener"><button>Open image</button></a></div><div class="sep">Related images</div><div class="grid">${rel.map(x=>`<a href="#" data-k="${esc(x._k)}"><img loading="lazy" referrerpolicy="no-referrer" src="${esc(px(x.thumbnail_src||x.img_src))}" alt=""></a>`).join('')}</div>`;$('#vw').style.display='block';$('#vw').scrollTop=0}
+$('#vw').onclick=e=>{if(e.target.id=='vx'){$('#vw').style.display='none';return}const a=e.target.closest('a[data-k]');if(a){e.preventDefault();openV(all.find(x=>x._k==a.dataset.k))}};
 function qq(){const f=lines(S.favs).slice(0,10);return only&&f.length?q+' ('+f.map(d=>'site:'+d).join(' OR ')+')':q}
 async function run(fresh){if(!S.backend){$('#dlg').showModal();return}
- if(fresh){all=[];pg=0;$('#out').innerHTML='<div class="msg">Searching… (the first search can take up to a minute if the server was asleep)</div>'}
- const ps=[pg+1,pg+2];pg+=2;let fail=0;
+ if(fresh){all=[];pg=0;X={};$('#out').innerHTML='<div class="msg">Searching… (the first search can take up to a minute if the server was asleep)</div>'}
+ const ps=(S.serper=='1'&&sOK&&!only)?[pg+1]:[pg+1,pg+2];pg+=ps.length;let fail=0;
  const bl=lines(S.block),fv=lines(S.favs),seen=new Set(all.map(r=>r._k)),qw=q.toLowerCase().split(/\s+/).filter(w=>w.length>2);
  const add=l=>l.forEach(r=>{if(!r||ok(r.url)=='#')return;const h=host(r.url);if(rank(h,bl)>=0)return;
-  const k=h+new URL(r.url).pathname.replace(/\/$/,'')+(cat=='videos'?new URL(r.url).search:'');if(seen.has(k))return;seen.add(k);
+  const k=cat=='images'?(r.img_src||r.url):h+new URL(r.url).pathname.replace(/\/$/,'')+(cat=='videos'?new URL(r.url).search:'');if(seen.has(k))return;seen.add(k);
   const t=(r.title||'').toLowerCase();r._k=k;r._h=h;r._f=rank(h,fv);r._s=(r.score||0)+(r.engines?r.engines.length:1)*.3+qw.filter(w=>t.includes(w)).length*.4;all.push(r)});
  await Promise.all(ps.map(async p=>{const l=await pull(p);if(l===null){fail++;return}add(l);draw()}));
  if(fail==ps.length&&!all.length)$('#out').innerHTML='<div class="msg">Could not reach the server. Check the Worker URL in ⚙ and try again.</div>'}
 function draw(){const a=[...all].sort((x,y)=>(x._f<0)-(y._f<0)||(x._f>=0&&x._f-y._f)||y._s-x._s);
  if(cat=='videos'){const f=a.filter(r=>r._f>=0),m={};a.filter(r=>r._f<0).forEach(r=>(m[r._h]=m[r._h]||[]).push(r));const g=Object.values(m),o=[];for(let i=0;g.some(x=>i<x.length);i++)g.forEach(x=>x[i]&&o.push(x[i]));a.length=0;a.push(...f,...o)}
  if(!a.length){$('#out').innerHTML='<div class="msg">No results. Try other words or turn off “My sites only”.</div>';return}
- let h='',hasF=a.some(r=>r._f>=0),sepd=false;
+ let h=cat=='general'?top():'',hasF=a.some(r=>r._f>=0),sepd=false;
  if(cat=='images')h+=`<div class="lens"><input id="iu" placeholder="Image URL for reverse search"><button data-l="g">Google Lens</button><button data-l="y">Yandex</button><button data-l="b">Bing</button><a href="https://lenso.ai" target="_blank" rel="noopener"><button>Lenso</button></a></div><div class="grid">`;
  a.forEach(r=>{if(hasF&&r._f<0&&!sepd){sepd=true;h+=(cat=='images'?'</div>':'')+'<div class="sep">Other sources</div>'+(cat=='images'?'<div class="grid">':'')}
   const bd=r._f>=0?'<span class="b">My site</span>':'',u=ok(r.url);
-  if(cat=='images'){const i=r.img_src||r.thumbnail_src;h+=`<a href="${esc(u)}" target="_blank" rel="noopener"><img loading="lazy" referrerpolicy="no-referrer" data-fb="${esc(px(r.thumbnail_src||''))}" src="${esc(px(i))}" alt="${esc(r.title)}"><small>${esc(r._h)}${r._f>=0?' ★':''}</small></a>`}
-  else if(cat=='videos'){const i=r.thumbnail||r.img_src;h+=`<div class="r vid">${i?`<img loading="lazy" referrerpolicy="no-referrer" src="${esc(px(i))}" alt="">`:''}<div><a class="t" href="${esc(u)}" target="_blank" rel="noopener">${esc(r.title)}</a><div class="h">${esc(r._h)}${r.length?' · '+esc(r.length):''}${r.engines?' · '+esc(r.engines[0]):''}${bd}</div><p>${esc((r.content||'').slice(0,140))}</p></div></div>`}
+  if(cat=='images'){const i=r.img_src||r.thumbnail_src;h+=`<a href="${esc(u)}" data-k="${esc(r._k)}" target="_blank" rel="noopener"><img loading="lazy" referrerpolicy="no-referrer" data-fb="${esc(px(r.thumbnail_src||''))}" src="${esc(px(i))}" alt="${esc(r.title)}"><small>${esc(r._h)}${r._f>=0?' ★':''}</small></a>`}
+  else if(cat=='videos'){const i=r.thumbnail||r.img_src;h+=`<div class="r vid">${i?`<div class="th"><img loading="lazy" referrerpolicy="no-referrer" src="${esc(px(i))}" alt="">${r.length?`<span class="badge">${esc(r.length)}</span>`:''}</div>`:''}<div><a class="t" href="${esc(u)}" target="_blank" rel="noopener">${esc(r.title)}</a><div class="h">${esc(r._h)}${r.length?' · '+esc(r.length):''}${r.engines?' · '+esc(r.engines[0]):''}${bd}</div><p>${esc((r.content||'').slice(0,140))}</p></div></div>`}
   else h+=`<div class="r"><div class="h">${esc(r._h)}${bd}</div><a class="t" href="${esc(u)}" target="_blank" rel="noopener">${esc(r.title)}</a><p>${esc(r.content)}</p></div>`});
  if(cat=='images')h+='</div>';
- h+=`<div class="row" style="margin:16px 0;flex-wrap:wrap"><button id="more">More results</button><a href="https://ahmia.fi/search/?q=${encodeURIComponent(q)}" target="_blank" rel="noopener">Search Tor index (Ahmia)</a></div>`;
+ h+=tail()+`<div class="row" style="margin:16px 0;flex-wrap:wrap"><button id="more">More results</button><a href="https://ahmia.fi/search/?q=${encodeURIComponent(q)}" target="_blank" rel="noopener">Search Tor index (Ahmia)</a></div>`;
  $('#out').innerHTML=h}
-$('#out').onclick=e=>{if(e.target.id=='more'){e.target.textContent='Loading…';run(false)}const l=e.target.dataset.l;if(l){const u=encodeURIComponent($('#iu').value.trim());if(!u)return;
+$('#out').onclick=e=>{const ga=e.target.closest('.grid a[data-k]');if(ga){e.preventDefault();openV(all.find(x=>x._k==ga.dataset.k));return}const rs=e.target.dataset.rs;if(rs){$('#q').value=rs;go();return}if(e.target.id=='more'){e.target.textContent='Loading…';run(false)}const l=e.target.dataset.l;if(l){const u=encodeURIComponent($('#iu').value.trim());if(!u)return;
  open({g:'https://lens.google.com/uploadbyurl?url=',y:'https://yandex.com/images/search?rpt=imageview&url=',b:'https://www.bing.com/images/search?view=detailv2&iss=sbi&q=imgurl:'}[l]+u,'_blank')}};
-$('#out').addEventListener('error',e=>{const i=e.target;if(i.tagName=='IMG'&&i.dataset.fb&&i.src!=i.dataset.fb)i.src=i.dataset.fb},true);
+document.addEventListener('error',e=>{const i=e.target;if(i.tagName=='IMG'&&i.dataset.fb&&i.src!=i.dataset.fb)i.src=i.dataset.fb},true);
 function go(){q=$('#q').value.trim();if(q)run(true)}$('#go').onclick=go;$('#q').onkeydown=e=>{if(e.key=='Enter')go()};
-const F=['backend','proxy','favs','block','preset','bg','fg','ac','fs','rad','layout','css'];
+const F=['backend','proxy','favs','block','preset','bg','fg','ac','fs','rad','layout','css','serper'];
 function fill(){F.forEach(k=>$('#'+k).value=S[k]);$('#fsv').textContent=S.fs;$('#radv').textContent=S.rad;$('#bk').value=JSON.stringify(S)}
 function save(){F.forEach(k=>S[k]=($('#'+k).type=='range')?+$('#'+k).value:$('#'+k).value);localStorage.setItem('sw',JSON.stringify(S));theme();fill();$('#dlg').close()}
 $('#opt').onclick=()=>{fill();$('#dlg').showModal()};$('#x').onclick=()=>$('#dlg').close();$('#save').onclick=save;
@@ -88,3 +110,4 @@ $('#imp').onclick=()=>{try{Object.assign(S,D,JSON.parse($('#bk').value));localSt
 $('#rst').onclick=()=>{if(confirm('Reset all settings?')){S=Object.assign({},D);localStorage.removeItem('sw');theme();fill()}};
 theme();tabs();if(!S.backend)setTimeout(()=>$('#opt').click(),300);
 </script></body></html>
+ 
