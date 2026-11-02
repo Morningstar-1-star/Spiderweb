@@ -1,0 +1,31 @@
+use_default_settings:
+  engines:
+    remove:
+      - ahmia
+      - torch
+      - brave
+      - brave.images
+      - brave.videos
+      - brave.news
+      - duckduckgo
+      - duckduckgo images
+      - duckduckgo videos
+      - vimeo
+      - google videos
+
+server:
+  # Set SEARXNG_SECRET in the Render environment; never commit the actual secret.
+  secret_key: "!!ENV:SEARXNG_SECRET!!"
+  limiter: false
+  image_proxy: true
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 8.0
+  pool_connections: 50
